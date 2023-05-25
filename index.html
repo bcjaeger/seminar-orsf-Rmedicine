@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Machine Learning for Risk Prediction using Oblique Random Survival Forests</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Byron C. Jaeger" />
+    <meta name="date" content="2023-04-20" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <script src="libs/clipboard/clipboard.min.js"></script>
+    <link href="libs/xaringanExtra-clipboard/xaringanExtra-clipboard.css" rel="stylesheet" />
+    <script src="libs/xaringanExtra-clipboard/xaringanExtra-clipboard.js"></script>
+    <script>window.xaringanExtraClipboard(null, {"button":"<i class=\"fa fa-clipboard\"><\/i>","success":"<i class=\"fa fa-check\" style=\"color: #90BE6D\"><\/i>","error":"Press Ctrl+C to Copy"})</script>
+    <link href="libs/font-awesome/css/all.css" rel="stylesheet" />
+    <link href="libs/font-awesome/css/v4-shims.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# Machine Learning for Risk Prediction using Oblique Random Survival Forests
+]
+.subtitle[
+## A demo using the aorsf package
+]
+.author[
+### Byron C. Jaeger
+]
+.date[
+### April 20, 2023
+]
+
+---
+
+
+
+
+
+
+class: center, middle
+
+# Hello!
+
+## Slides are here: https://www.byronjaeger.com/talk/
+
+---
+
+# Outline
+
+**Background and Jargon**
+
+- Machine Learning &amp; Supervised Learning
+
+- Decision Trees &amp; Random Forests: Axis-based &amp; Oblique
+
+- Censoring &amp; Random Survival Forests 
+
+- Oblique Random Survival Forests 
+
+**Demo with `aorsf`**
+
+- Fit
+
+- Interpret
+
+- Benchmark
+
+- Extend
+
+---
+background-image: url(img/data_mining.jpg)
+background-size: 15%
+background-position: 95% 5%
+
+# Machine Learning
+
+.pull-left[
+
+### Supervised learning
+
+- Labeled data
+
+- Predict an outcome
+
+- Learners
+
+- Risk prediction
+
+]
+
+.pull-right[
+
+### Unsupervised learning
+
+- Unlabeled data
+
+- Find structure
+
+- Clusters
+
+- Organize medical records
+
+]
+
+---
+class: center, middle
+
+# Supervised learning
+
+---
+
+&lt;img src="img/ml-supervised-1.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+
+&lt;img src="img/ml-supervised-1-1.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-1-2.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-1-3.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-2.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-3.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-4.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-5.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="img/ml-supervised-6.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+---
+layout: false
+class: center, middle, inverse
+
+# Decision Trees and Random Forests
+
+---
+background-image: url(img/penguins.png)
+background-size: 45%
+background-position: 85% 72.5%
+
+## Decision trees
+
+- Partition the space of predictor variables.
+
+- Used in classification, regression, and survival analysis. 
+
+- May be **axis-based** or **oblique** (more on this soon)
+
+.pull-left[
+We'll demonstrate the mechanics of decision trees by developing a prediction rule to classify penguin&lt;sup&gt;1&lt;/sup&gt; species (chinstrap, gentoo, or adelie) based on bill depth and bill length.
+]
+
+.footnote[
+&lt;sup&gt;1&lt;/sup&gt;Data were collected and made available by [Dr. Kristen Gorman](https://www.uaf.edu/cfos/people/faculty/detail/kristen-gorman.php) and the [Palmer Station](https://pal.lternet.edu/), a member of the [Long Term Ecological Research Network](https://lternet.edu/).
+]
+
+---
+
+
+
+
+Dimensions for Adelie, Chinstrap and Gentoo Penguins at Palmer Station
+
+&lt;img src="index_files/figure-html/unnamed-chunk-11-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+Partition all the penguins into flipper length &lt; 207 or ≥ 207
+
+&lt;img src="index_files/figure-html/unnamed-chunk-12-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+Partition penguins on the left into bill length &lt; 43 or ≥ 43
+
+&lt;img src="index_files/figure-html/unnamed-chunk-13-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+The same partitions visualized as a binary tree
+
+![](index_files/figure-html/unnamed-chunk-14-1.png)&lt;!-- --&gt;
+
+---
+
+## Random Forest
+
+Each tree is grown through a randomized process:
+
+- tree-specific bootstrapped replicate of the training data
+
+- node-specific random subsets of predictors
+
+Randomness makes the trees more independent
+
+- Each randomized tree is *individually weaker* than a standard decision tree.
+
+- The *average prediction* from many randomized trees is more accurate than the prediction from a single tree.
+
+Why? Consider 100 classification trees, each with 55% chance of choosing the right answer, 45% chance of choosing wrong.
+
+- if the trees are all the same, the ensemble has 45% chance of being wrong
+    
+- if they are completely independent and we use the majority vote:
+    
+  
+  ```r
+  # chance of 49 or fewer trees being right
+  pbinom(q = 49, size = 100, prob = 0.55)
+  ```
+  
+  ```
+  ## [1] 0.1345762
+  ```
+
+
+
+
+---
+
+Predictions from a non-random, **individual tree**
+
+&lt;img src="index_files/figure-html/unnamed-chunk-16-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+Predictions from **randomized individual tree**
+
+&lt;img src="index_files/figure-html/unnamed-chunk-17-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+
+**Ensemble** predictions from a random forest
+
+&lt;img src="index_files/figure-html/unnamed-chunk-18-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+## Oblique trees
+
+Instead of using one variable to split the data, use a weighted combination of variables.
+
+*I.e.,* instead of  `\(x_1 &lt; \text{cutpoint}\)`, use `\(c_1 * x_1 + c_2 * x_2 &lt; \text{cutpoint}\)`
+
+&lt;img src="img/axis_versus_oblique.png" width="80%" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+Predictions from **randomized individual oblique tree**
+
+&lt;img src="index_files/figure-html/unnamed-chunk-20-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+class: center, middle
+background-image: url("img/picasso_dalle2.png")
+background-size: contain
+
+---
+
+**Ensemble** predictions from an oblique random forest
+
+&lt;img src="index_files/figure-html/unnamed-chunk-21-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+class: middle, center
+
+# Censoring
+
+---
+
+&lt;img src="img/censoring.svg" width="75%" style="display: block; margin: auto;" /&gt;
+
+
+---
+class: center, middle
+
+# Random Survival Forests (RSFs)
+
+---
+
+&lt;img src="img/rpart_plot_surv.png" width="80%" style="display: block; margin: auto;" /&gt;
+
+---
+
+## Oblique RSFs
+
+Around 2018, I wrote some code to fit RSFs with oblique splits.
+
+- Published a paper to share the idea + code.&lt;sup&gt;1&lt;/sup&gt;
+
+- TLDR: Cox regression in each non-leaf node, use the regression coefficients to make oblique splits.
+
+Around 2020, that code got picked up and used for heart failure risk prediction.&lt;sup&gt;2&lt;/sup&gt;
+
+- oblique RSF did better than boosting, penalized, and stepwise regression! 😄 
+
+- oblique RSF was slow and hard to interpret. 😞 
+
+.footnote[
+
+1. Jaeger BC, Long DL, Long DM, Sims M, Szychowski JM, Min YI, Mcclure LA, Howard G, Simon N. OBLIQUE RANDOM SURVIVAL FORESTS. Ann Appl Stat. 2019 Sep;13(3):1847-1883. doi: 10.1214/19-aoas1261. Epub 2019 Oct 17. PMID: 36704751; PMCID: PMC9875945.
+
+2. Segar MW, Jaeger BC, Patel KV, Nambi V, Ndumele CE, Correa A, Butler J, Chandra A, Ayers C, Rao S, Lewis AA, Raffield LM, Rodriguez CJ, Michos ED, Ballantyne CM, Hall ME, Mentz RJ, de Lemos JA, Pandey A. Development and Validation of Machine Learning-Based Race-Specific Models to Predict 10-Year Risk of Heart Failure: A Multicohort Analysis. Circulation. 2021 Jun 15;143(24):2370-2383. doi: 10.1161/CIRCULATIONAHA.120.053134. Epub 2021 Apr 13. PMID: 33845593; PMCID: PMC9976274.
+
+]
+
+---
+class: center, middle
+background-image: url("img/meme_slow_R.jpg")
+background-size: contain
+
+---
+
+## Oblique RSFs
+
+Around 2021, I committed to `aorsf`, a re-write of my oblique RSF code
+
+- Open review by rOpenSci and published in JOSS.&lt;sup&gt;1&lt;/sup&gt;
+
+- Large benchmark and more details in pre-print.&lt;sup&gt;2&lt;/sup&gt;
+
+- Named after the software my Dad wrote while I was growing up: AORSA&lt;sup&gt;3&lt;/sup&gt;
+
+.footnote[
+
+1. Jaeger BC, Welden S, Lenoir K, Pajewski NM. aorsf: An R package for supervised learning using the oblique random survival forest. Journal of Open Source Software. 2022 Sep 28;7(77):4705.
+
+2. Jaeger BC, Welden S, Lenoir K, Speiser JL, Segar MW, Pandey A, Pajewski NM. Accelerated and interpretable oblique random survival forests. arXiv preprint arXiv:2208.01129. 2022 Aug 1.
+
+3. [Article from Oak Ridge National Laboratory Cray User group featuring AORSA](https://www.laboratorynetwork.com/doc/oak-ridge-national-laboratory-speeds-tests-of-0001)
+
+]
+
+---
+class: center, middle, inverse
+
+# Demo with aorsf
+
+---
+layout: true
+
+## Fit an oblique RSF
+
+---
+
+**Note**: Copy/paste my code and run it locally&lt;sup&gt;1&lt;/sup&gt;
+
+Step 1: install/load the `aorsf` R package
+
+
+
+```r
+# un-comment line below to install aorsf if needed
+# install.packages('aorsf')
+
+library(aorsf)
+library(tidyverse) # will be used throughout
+```
+
+
+.footnote[
+&lt;sup&gt;1&lt;/sup&gt;Thanks to [Garrick Aden-Buie's xaringanExtra](https://github.com/gadenbuie/xaringanExtra) for this awesome feature.
+]
+
+---
+
+Step 2: Inspect the `pbc_orsf` data
+
+
+```r
+as_tibble(pbc_orsf)
+```
+
+```
+## # A tibble: 276 x 20
+##       id  time status trt     age sex   ascites hepato spiders edema  bili  chol
+##    &lt;int&gt; &lt;int&gt;  &lt;dbl&gt; &lt;fct&gt; &lt;dbl&gt; &lt;fct&gt; &lt;fct&gt;   &lt;fct&gt;  &lt;fct&gt;   &lt;fct&gt; &lt;dbl&gt; &lt;int&gt;
+##  1     1   400      1 d_pe~  58.8 f     1       1      1       1      14.5   261
+##  2     2  4500      0 d_pe~  56.4 f     0       1      1       0       1.1   302
+##  3     3  1012      1 d_pe~  70.1 m     0       0      0       0.5     1.4   176
+##  4     4  1925      1 d_pe~  54.7 f     0       1      1       0.5     1.8   244
+##  5     5  1504      0 plac~  38.1 f     0       1      1       0       3.4   279
+##  6     7  1832      0 plac~  55.5 f     0       1      0       0       1     322
+##  7     8  2466      1 plac~  53.1 f     0       0      0       0       0.3   280
+##  8     9  2400      1 d_pe~  42.5 f     0       0      1       0       3.2   562
+##  9    10    51      1 plac~  70.6 f     1       0      1       1      12.6   200
+## 10    11  3762      1 plac~  53.7 f     0       1      1       0       1.4   259
+## # i 266 more rows
+## # i 8 more variables: albumin &lt;dbl&gt;, copper &lt;int&gt;, alk.phos &lt;dbl&gt;, ast &lt;dbl&gt;,
+## #   trig &lt;int&gt;, platelet &lt;int&gt;, protime &lt;dbl&gt;, stage &lt;ord&gt;
+```
+
+
+---
+
+Step 3: Fit and inspect your oblique RSF
+
+
+```r
+fit_orsf &lt;- orsf(data = pbc_orsf, 
+                 formula = time + status ~ . - id)
+
+fit_orsf
+```
+
+```
+## ---------- Oblique random survival forest
+## 
+##      Linear combinations: Accelerated
+##           N observations: 276
+##                 N events: 111
+##                  N trees: 500
+##       N predictors total: 17
+##    N predictors per node: 5
+##  Average leaves per tree: 25
+## Min observations in leaf: 5
+##       Min events in leaf: 1
+##           OOB stat value: 0.84
+##            OOB stat type: Harrell's C-statistic
+##      Variable importance: anova
+## 
+## -----------------------------------------
+```
+
+---
+
+Do you prefer the classic syntax?
+
+
+
+```r
+library(survival)
+
+fit_cph &lt;- coxph(formula = Surv(time, status) ~ . - id,
+                 data = pbc_orsf)
+```
+
+`aorsf` supports that:
+
+
+```r
+fit_orsf &lt;- orsf(formula = Surv(time, status) ~ . - id,
+                 data = pbc_orsf)
+```
+
+Prefer pipes? `aorsf` supports that too.
+
+
+```r
+set.seed(329) # use this seed to make your results match slides
+
+fit_orsf &lt;- pbc_orsf |&gt;
+  orsf(formula = time + status ~ . - id)
+```
+
+---
+
+Fan of `tidymodels`? (me too!) `aorsf` is a valid engine for censored regression.
+
+
+```r
+library(parsnip)
+library(censored) # must be version 0.2.0 or higher
+
+rf_spec &lt;- 
+  rand_forest(trees = 200) %&gt;%
+  set_engine("aorsf") %&gt;% 
+  set_mode("censored regression") 
+
+fit_tidy &lt;- rf_spec %&gt;% 
+  parsnip::fit(data = pbc_orsf, 
+               formula = Surv(time, status) ~ . - id)
+
+# fit printed on next slide for space
+```
+
+---
+
+Fan of `tidymodels`? (me too!) `aorsf` is a valid engine for censored regression.
+
+
+```r
+fit_tidy
+```
+
+```
+## parsnip model object
+## 
+## ---------- Oblique random survival forest
+## 
+##      Linear combinations: Accelerated
+##           N observations: 276
+##                 N events: 111
+##                  N trees: 200
+##       N predictors total: 17
+##    N predictors per node: 5
+##  Average leaves per tree: 25
+## Min observations in leaf: 5
+##       Min events in leaf: 1
+##           OOB stat value: 0.84
+##            OOB stat type: Harrell's C-statistic
+##      Variable importance: anova
+## 
+## -----------------------------------------
+```
+
+
+---
+
+layout: true
+
+## Interpret an oblique RSF
+
+---
+
+Get expected risk (i.e., partial dependence [`pd`]) in descending order of importance
+
+
+```r
+orsf_summarize_uni(fit_orsf, n_variables = 1)
+```
+
+```
+## 
+## -- bili (VI Rank: 1) ----------------------------
+## 
+##         |---------------- risk ----------------|
+##   Value      Mean    Median     25th %    75th %
+##  &lt;char&gt;     &lt;num&gt;     &lt;num&gt;      &lt;num&gt;     &lt;num&gt;
+##    0.80 0.2343668 0.1116206 0.04509389 0.3729834
+##     1.4 0.2547884 0.1363122 0.05985486 0.4103148
+##     3.5 0.3698634 0.2862611 0.16196924 0.5533383
+## 
+##  Predicted risk at time t = 1788 for top 1 predictors
+```
+
+---
+
+`orsf_pd()` functions give full control over expected risk
+
+- `orsf_pd_inb()`: computes expected risk using all training data
+- `orsf_pd_oob()`: computes expected risk using out-of-bag only
+- `orsf_pd_new()`: computes expected risk using new data
+
+
+```r
+pd_oob &lt;- orsf_pd_oob(fit_orsf, pred_spec = list(bili = 1:5))
+
+pd_oob
+```
+
+```
+##    pred_horizon  bili      mean        lwr      medn       upr
+##           &lt;num&gt; &lt;num&gt;     &lt;num&gt;      &lt;num&gt;     &lt;num&gt;     &lt;num&gt;
+## 1:         1788     1 0.2390257 0.01072737 0.1137410 0.8746058
+## 2:         1788     2 0.2898135 0.04198550 0.1849255 0.8930730
+## 3:         1788     3 0.3466884 0.07529034 0.2593297 0.9112996
+## 4:         1788     4 0.3906128 0.10570410 0.3148943 0.9213005
+## 5:         1788     5 0.4346375 0.15449708 0.3647937 0.9305869
+```
+
+.footnote[Why is `pred_horizon` set at 1788? If you don't set a `pred_horizon`, `orsf` functions will set it for you as the median follow-up time]
+
+
+---
+
+Use `pred_horizon` to make expected risk more interpretable.
+
+- expected risk for men and women at 1, 2, 3, 4, and 5 years:
+
+  
+  ```r
+  pd_by_gender &lt;- orsf_pd_oob(fit_orsf, 
+                              pred_spec = list(sex = c("m", "f")),
+                              pred_horizon = 365 * 1:5)
+  
+  pd_by_gender %&gt;% 
+    dplyr::select(pred_horizon, sex, mean) %&gt;% 
+    tidyr::pivot_wider(names_from = sex, values_from = mean) %&gt;% 
+    dplyr::mutate(ratio = m / f)
+  ```
+  
+  ```
+  ## # A tibble: 5 x 4
+  ##   pred_horizon      m      f ratio
+  ##          &lt;dbl&gt;  &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+  ## 1          365 0.0768 0.0728  1.06
+  ## 2          730 0.125  0.111   1.13
+  ## 3         1095 0.230  0.195   1.18
+  ## 4         1460 0.298  0.251   1.19
+  ## 5         1825 0.355  0.296   1.20
+  ```
+
+Does expected risk increase faster over time for men?
+
+---
+
+Use `pred_horizon` to investigate expected risk profiles over time
+
+
+```r
+fit_orsf %&gt;% 
+  orsf_pd_oob(pred_spec = list(sex = c("m", "f")),
+              pred_horizon = seq(365, 365*5, by = 25)) %&gt;% 
+  ggplot(aes(x = pred_horizon, y = mean, color = sex)) +
+  geom_line() +
+  labs(x = 'Time since baseline', y = 'Expected risk')
+```
+
+![](index_files/figure-html/unnamed-chunk-35-1.png)&lt;!-- --&gt;
+
+
+---
+
+Or, fix `pred_horizon` and look at risk profiles over other variables
+
+
+```r
+pred_spec = list(bili = seq(1, 5, length.out = 20),
+                 edema = levels(pbc_orsf$edema),
+                 trt = levels(pbc_orsf$trt))
+
+pd_bili_edema &lt;- orsf_pd_oob(fit_orsf, pred_spec)
+
+fig &lt;- ggplot(pd_bili_edema) + 
+  aes(x = bili, y = medn, col = trt, linetype = edema) +
+  geom_line() + 
+  labs(y = 'Expected predicted risk')
+
+# fig on next slide for space
+```
+
+---
+
+Or, fix `pred_horizon` and look at risk profiles over other variables
+
+![](index_files/figure-html/unnamed-chunk-37-1.png)&lt;!-- --&gt;
+
+---
+layout: false
+class: center, middle
+
+# Variable importance
+
+---
+
+## ANOVA importance
+
+A fast method to compute variable importance with (some) oblique random forests:
+
+For each predictor:
+
+1. Compute p-values for each coefficient
+
+1. Compute the proportion of p-values that are low (&lt;0.01)
+
+Importance of a predictor = the proportion of times its p-value is low.
+
+---
+
+## Permutation importance
+
+For each predictor:
+
+1. Permute predictor values
+
+1. Measure prediction error with permuted values
+
+Importance of a predictor = increase in prediction error after permutation
+
+---
+
+&lt;img src="index_files/figure-html/unnamed-chunk-38-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="index_files/figure-html/unnamed-chunk-39-1.png" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+## Negation importance
+
+For each predictor:
+
+1. Multiply coefficient in linear combination by -1
+
+1. Measure prediction error with permuted values
+
+Importance of a predictor = increase in prediction error after negation
+
+
+---
+
+&lt;img src="index_files/figure-html/unnamed-chunk-40-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="index_files/figure-html/unnamed-chunk-41-1.png" style="display: block; margin: auto;" /&gt;
+
+---
+
+## Variable importance
+
+
+```r
+orsf_vi_anova(fit_orsf)[1:5]
+```
+
+```
+##   ascites      bili     edema    copper   albumin 
+## 0.3832659 0.2720345 0.2383323 0.2016109 0.1750125
+```
+
+```r
+orsf_vi_permute(fit_orsf)[1:5]
+```
+
+```
+##        bili         age      copper     albumin     protime 
+## 0.016670140 0.008908106 0.005521984 0.005365701 0.003594499
+```
+
+```r
+orsf_vi_negate(fit_orsf)[1:5]
+```
+
+```
+##       bili        age     copper    protime    albumin 
+## 0.07637008 0.02740154 0.02505730 0.01302355 0.01000208
+```
+
+
+---
+layout: false
+class: center, middle, inverse
+
+# But how accurate is `aorsf`'s predicted risk?
+
+---
+layout:true
+
+## Benchmarking `aorsf`
+
+---
+
+Let's run a benchmark using `mlr3`&lt;sup&gt;1&lt;/sup&gt; comparing `aorsf`'s oblique RSF to:
+
+- axis-based RSFs in `randomForestSRC`
+- axis-based RSFs in `ranger`
+
+We'll run an experiment where 
+
+1. each approach is used to make a prediction model with the same training data
+2. each model is validated in the same external data. 
+
+
+Here are the packages we'll use:
+
+
+```r
+library(mlr3verse)
+library(mlr3proba)
+library(mlr3extralearners)
+library(mlr3viz)
+library(mlr3benchmark)
+library(OpenML) # for some of the prediction tasks
+```
+
+.footnote[&lt;sup&gt;1&lt;/sup&gt;`aorsf` is compatible with `mlr3` too. Find more about `mlr3` here: https://mlr3.mlr-org.com/]
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- Mayo Clinic Primary Biliary Cholangitis Data
+
+  
+  ```r
+  task_pbc &lt;- 
+   TaskSurv$new(
+    id = 'pbc',  
+    backend = dplyr::select(pbc_orsf, -id) %&gt;% 
+     dplyr::mutate(stage = as.numeric(stage)),  
+    time = "time", 
+    event = "status"
+   )
+  ```
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- Veteran's Administration Lung Cancer Trial
+
+  
+  ```r
+  data(veteran, package = "randomForestSRC")
+  
+  task_veteran &lt;- 
+   TaskSurv$new(
+    id = 'veteran',  
+    backend = veteran,  
+    time = "time", 
+    event = "status"
+   )
+  ```
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- NKI 70 gene signature
+
+  
+  ```r
+  data_nki &lt;- OpenML::getOMLDataSet(data.id = 1228)
+  
+  task_nki &lt;- 
+   TaskSurv$new(
+    id = 'nki',  
+    backend = data_nki$data,  
+    time = "time", 
+    event = "event"
+   )
+  ```
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- Gene Expression-Based Survival Prediction in Lung Adenocarcinoma
+
+  
+  ```r
+  data_lung &lt;- OpenML::getOMLDataSet(data.id = 1245)
+  
+  task_lung &lt;- 
+   TaskSurv$new(
+    id = 'nki',  
+    backend = data_lung$data %&gt;% 
+     dplyr::mutate(OS_event = as.numeric(OS_event) -1),  
+    time = "OS_years", 
+    event = "OS_event"
+   )
+  ```
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- Chemotherapy for Stage B/C colon cancer
+
+  
+  ```r
+  # there are two rows per person, one for death 
+  # and the other for recurrence, hence the two tasks
+  
+  task_colon_death &lt;-
+   TaskSurv$new(
+    id = 'colon_death',  
+    backend = survival::colon %&gt;%
+     dplyr::filter(etype == 2) %&gt;% 
+     tidyr::drop_na() %&gt;% 
+     # drop id, redundant variables
+     dplyr::select(-id, -study, -node4, -etype),
+     dplyr::mutate(OS_event = as.numeric(OS_event) -1),  
+    time = "time", 
+    event = "status"
+   )
+  ```
+
+---
+
+Retrieve some public data and set it up as a `mlr3` task object.
+
+- Chemotherapy for Stage B/C colon cancer
+
+  
+  ```r
+  # there are two rows per person, one for death 
+  # and the other for recurrence, hence the two tasks
+  
+  task_colon_recur &lt;-
+   TaskSurv$new(
+    id = 'colon_death',  
+    backend = survival::colon %&gt;%
+     dplyr::filter(etype == 1) %&gt;% 
+     tidyr::drop_na() %&gt;% 
+     # drop id, redundant variables
+     dplyr::select(-id, -study, -node4, -etype),
+     dplyr::mutate(OS_event = as.numeric(OS_event) -1),  
+    time = "time", 
+    event = "status"
+   )
+  ```
+
+---
+
+TLDR; we have 11 different prediction tasks for this benchmark.
+
+
+
+```r
+# putting them all together
+tasks &lt;- list(task_pbc,
+              task_veteran,
+              task_nki,
+              task_lung,
+              task_colon_death,
+              task_colon_recur,
+              # add a few more pre-made ones
+              tsk("actg"),
+              tsk("gbcs"),
+              tsk("grace"),
+              tsk("unemployment"),
+              tsk("whas"))
+```
+
+---
+
+With these tasks we can run a benchmark on our favorite learners:
+
+
+```r
+# Learners with default parameters
+learners &lt;- lrns(c("surv.ranger", "surv.rfsrc", "surv.aorsf"))
+
+# Brier (Graf) score, c-index and training time as measures
+measures &lt;- msrs(
+  c("surv.graf", # Brier score (lower is better)
+    "surv.cindex", # C-index (higher is better)
+    "surv.calib_alpha", # Calibration slope (1 is best)
+    "time_train") # time to fit model
+)
+
+# Benchmark with 5-fold CV
+design &lt;- benchmark_grid(
+  tasks = tasks,
+  learners = learners,
+  resamplings = rsmps("cv", folds = 5)
+)
+
+benchmark_result &lt;- benchmark(design)
+
+bm_scores &lt;- benchmark_result$score(measures, predict_sets = "test")
+```
+
+---
+
+
+Summarize by taking the mean over all 11 tasks, and all 5 folds:
+
+
+```r
+bm_scores %&gt;%
+ select(task_id, learner_id, starts_with('surv'), time_train) %&gt;%
+ group_by(learner_id) %&gt;% 
+ filter(!is.infinite(surv.graf)) %&gt;% 
+ summarize(
+  across(
+   .cols = c(surv.graf, surv.cindex, surv.calib_alpha, time_train),
+   .fns = mean
+  )
+ )
+```
+
+
+```
+## # A tibble: 3 x 5
+##   learner_id  surv.graf surv.cindex surv.calib_alpha time_train
+##   &lt;chr&gt;           &lt;dbl&gt;       &lt;dbl&gt;            &lt;dbl&gt;      &lt;dbl&gt;
+## 1 surv.aorsf      0.143       0.734            0.994      0.301
+## 2 surv.ranger     0.156       0.718            1.07       2.08 
+## 3 surv.rfsrc      0.146       0.724            0.985      0.711
+```
+
+---
+layout: false
+class: center, middle
+
+# Extending aorsf
+
+---
+
+## Extending aorsf
+
+`aorsf` includes a family of control functions:
+
+- `orsf_control_cph()` uses a full Cox regression
+
+- `orsf_control_fast()` uses partial Cox regression (default)
+
+- `orsf_control_net()` uses penalized Cox regression (slower)
+
+- `orsf_control_custom()` uses whatever you give it
+
+---
+
+## Extending aorsf
+
+Make an oblique RSF that makes oblique splits randomly:
+
+
+```r
+f_rando &lt;- function(x_node, y_node, w_node){
+ matrix(runif(ncol(x_node)), ncol=1) 
+}
+
+fit_rando &lt;- orsf(pbc_orsf,
+                  Surv(time, status) ~ . - id,
+                  control = orsf_control_custom(beta_fun = f_rando),
+                  n_tree = 500)
+```
+
+---
+
+## Extending aorsf
+
+Make an oblique RSF that makes oblique splits with principal component analysis:
+
+
+```r
+f_pca &lt;- function(x_node, y_node, w_node) { 
+ 
+ # estimate two principal components.
+ pca &lt;- stats::prcomp(x_node, rank. = 2)
+ # use the second principal component to split the node
+ pca$rotation[, 2L, drop = FALSE]
+ 
+}
+
+fit_pca &lt;- orsf(pbc_orsf,
+                Surv(time, status) ~ . - id,
+                control = orsf_control_custom(beta_fun = f_pca),
+                n_tree = 500)
+```
+
+---
+
+## Extending aorsf
+
+Compare these to our initial fit:
+
+
+```r
+library(riskRegression)
+
+risk_preds &lt;- list(dflt = 1 - fit_orsf$pred_oobag, 
+                   rando = 1 - fit_rando$pred_oobag,
+                   pca = 1 - fit_pca$pred_oobag)
+
+sc &lt;- Score(object = risk_preds, 
+            formula = Surv(time, status) ~ 1, 
+            data = pbc_orsf, 
+            summary = 'IPA',
+            times = fit_pca$pred_horizon)
+```
+
+---
+
+## Extending aorsf
+
+Compare these to our initial fit:
+
+
+```
+## 
+## Results by model:
+## 
+##     model times    AUC  lower  upper
+##    &lt;fctr&gt; &lt;num&gt; &lt;char&gt; &lt;char&gt; &lt;char&gt;
+## 1:   dflt  1788 90.820 86.599 95.041
+## 2:  rando  1788 88.557 84.078 93.036
+## 3:    pca  1788 89.754 85.310 94.198
+## 
+## Results of model comparisons:
+## 
+##    times  model reference delta.AUC  lower  upper      p
+##    &lt;num&gt; &lt;fctr&gt;    &lt;fctr&gt;    &lt;char&gt; &lt;char&gt; &lt;char&gt;  &lt;num&gt;
+## 1:  1788  rando      dflt    -2.263 -4.303 -0.222 0.0297
+## 2:  1788    pca      dflt    -1.066 -2.702  0.571 0.2018
+## 3:  1788    pca     rando     1.197 -1.120  3.515 0.3113
+```
+
+---
+
+## What we covered
+
+Fitting oblique RSFs with `aorsf`
+
+- Similar to `coxph` syntax, usable as `tidymodels` engine and `mlr3` learner
+
+Interpreting oblique RSFs with `aorsf`
+
+- Partial dependence and variable importance
+
+Benchmarking `aorsf`
+
+- Excellent discrimination and calibration compared to axis-based RSF
+
+- `aorsf` is computationally efficient (caveat: no parallel computing)
+
+Extending `aorsf`
+
+- Customize your oblique RSF with `orsf_control` functions.
+
+---
+
+## Acknowledgments
+
+Research reported in this presentation was supported by 
+
+- Center for Biomedical Informatics, Wake Forest University School of Medicine. 
+
+- National Center for Advancing Translational Sciences (NCATS), National Institutes of Health, through Grant Award Number UL1TR001420. 
+
+The content is solely the responsibility of the authors and does not necessarily represent the official views of the NIH.
+
+---
+
+background-image: url(img/orsf_collaborators.svg)
+background-size: contain
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"ratio": "16:9",
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
