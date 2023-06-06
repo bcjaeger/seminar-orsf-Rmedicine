@@ -364,7 +364,7 @@ rpart.plot(mdl_tree,
 
 Each tree is grown through a randomized process:
 
-- tree-specific bootstrapped replicate of the training data
+- tree-specific bootstrapped replicate of the training data (out-of-bag data means not in the bootstrapped replicate)
 
 - node-specific random subsets of predictors
 
@@ -1017,7 +1017,7 @@ For each predictor:
 
 1. Multiply coefficient in linear combination by -1
 
-1. Measure prediction error with permuted values
+1. Measure prediction error with negated coefficients
 
 Importance of a predictor = increase in prediction error after negation
 
